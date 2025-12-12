@@ -57,4 +57,164 @@
     }
     .card h2{
       margin:0 0 10px 0;
-      font-si
+      font-size: 16px;
+      letter-spacing: 0.2px;
+    }
+    .actions{
+      display:flex; flex-wrap: wrap; gap:10px;
+      margin-top: 10px;
+    }
+    .btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:10px 12px;
+      border-radius: 12px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      text-decoration:none;
+      font-size: 14px;
+    }
+    .btn:hover{ background: rgba(255,255,255,0.12); }
+    .btn small{ color: var(--muted); font-size: 12px; }
+
+    /* DataTables cosmetics (minimal, readable on dark background) */
+    table.dataTable { color: var(--text); }
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select{
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 8px;
+      outline: none;
+    }
+    .dataTables_wrapper .dataTables_paginate .dataTables_paginate_button{
+      color: var(--text) !important;
+      border: 1px solid transparent !important;
+      border-radius: 10px !important;
+    }
+    .dataTables_wrapper .dataTables_paginate .dataTables_paginate_button.current{
+      background: rgba(255,255,255,0.12) !important;
+      border: 1px solid var(--border) !important;
+    }
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter{
+      color: var(--muted) !important;
+    }
+
+    footer{ margin-top: 16px; color: var(--muted); font-size: 12px; }
+    footer a{ color: var(--text); }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="logo">
+        <img src="assets/logo.png" alt="Clube Xadrez Glória">
+      </div>
+      <div class="titles">
+        <h1>Xadrez Glória</h1>
+        <p>Classificação geral e resultados por ronda</p>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Classificação geral</h2>
+        <p style="margin:0 0 10px 0; color: var(--muted); font-size: 13px;">
+          Pesquise por jogador, ou clique nos cabeçalhos para ordenar.
+        </p>
+
+        <table id="standings" class="display"></table>
+      </div>
+
+      <div class="card">
+        <h2>Rondas</h2>
+        <div class="actions">
+          <a class="btn" href="round/1.html">Ronda 1</a>
+          <a class="btn" href="round/2.html">Ronda 2</a>
+          <a class="btn" href="round/3.html">Ronda 3</a>
+          <a class="btn" href="round/4.html">Ronda 4</a>
+          <a class="btn" href="round/5.html">Ronda 5</a>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Dica: guarde este link e partilhe com o clube. Atualizações são automáticas após editar o Google Sheets.
+    </footer>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+
+  <script>
+    const STANDINGS_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUHCT41rzpS78Ga3-cymPB94KTv6d88Lx1PYTleMDOLOzaE53n5v-dfX91MNqQvEP_9FlSvCLdhxyr/pub?gid=0&single=true&output=csv";
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], field = "", inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"') {
+          if (inQuotes && next === '"') { field += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes) {
+          row.push(field); field = "";
+        } else if ((c === '\n' || c === '\r') && !inQuotes) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(field); field = "";
+          if (row.some(v => v.trim() !== "")) rows.push(row);
+          row = [];
+        } else {
+          field += c;
+        }
+      }
+      row.push(field);
+      if (row.some(v => v.trim() !== "")) rows.push(row);
+      return rows;
+    }
+
+    async function initStandings() {
+      const res = await fetch(STANDINGS_CSV_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("Não consegui carregar o CSV de classificação.");
+      const csvText = await res.text();
+
+      const data = parseCSV(csvText);
+      if (data.length < 2) throw new Error("A classificação não tem dados suficientes.");
+
+      const headers = data[0].map(h => h.trim());
+      const rows = data.slice(1);
+
+      const table = document.getElementById("standings");
+      table.innerHTML = `
+        <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr>${headers.map((_, i) => `<td>${(r[i] ?? "").trim()}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      `;
+
+      new DataTable("#standings", {
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [10, 25, 50, 100],
+        order: [],        // no forced ordering; click headers
+        responsive: true
+      });
+    }
+
+    initStandings().catch(err => {
+      document.querySelector(".wrap").insertAdjacentHTML("beforeend",
+        `<p style="color:#ffb4b4"><strong>Erro:</strong> ${err.message}</p>`
+      );
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
