@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xadrez Glória — Ronda 5</title>
+
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+
+  <style>
+    :root{
+      --bg: #0b1220;
+      --card: rgba(255,255,255,0.06);
+      --border: rgba(255,255,255,0.10);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.70);
+    }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 800px at 15% 10%, rgba(255,255,255,0.10), transparent 55%),
+                  radial-gradient(1200px 800px at 85% 20%, rgba(255,255,255,0.08), transparent 55%),
+                  var(--bg);
+      color: var(--text);
+    }
+    .wrap{ max-width: 1100px; margin: 0 auto; padding: 24px 16px 40px; }
+    .hero{
+      display:flex; align-items:center; justify-content:space-between; gap:16px;
+      padding:16px; border:1px solid var(--border);
+      border-radius: 18px; background: var(--card);
+      backdrop-filter: blur(6px);
+    }
+    .left{ display:flex; align-items:center; gap:12px; }
+    .logo{
+      width:44px; height:44px; border-radius: 12px;
+      background: rgba(255,255,255,0.10);
+      overflow:hidden;
+    }
+    .logo img{ width:100%; height:100%; object-fit:cover; }
+    h1{ font-size: 18px; margin:0; }
+    .sub{ margin:4px 0 0; color: var(--muted); font-size: 13px; }
+    .nav a{
+      display:inline-flex; align-items:center;
+      padding:10px 12px; border-radius:12px;
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.08);
+      color: var(--text); text-decoration:none;
+      font-size: 14px;
+    }
+    .nav a:hover{ background: rgba(255,255,255,0.12); }
+
+    .card{
+      margin-top: 14px;
+      padding:14px;
+      border:1px solid var(--border);
+      border-radius:18px;
+      background: var(--card);
+      backdrop-filter: blur(6px);
+    }
+    .card h2{ margin:0 0 10px 0; font-size:16px; }
+
+    table.dataTable { color: var(--text); }
+    .dataTables_wrapper .dataTables_filter input,
+    .dataTables_wrapper .dataTables_length select{
+      color: var(--text);
+      background: rgba(255,255,255,0.08);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 6px 8px;
+      outline: none;
+    }
+    .dataTables_wrapper .dataTables_info,
+    .dataTables_wrapper .dataTables_length,
+    .dataTables_wrapper .dataTables_filter{
+      color: var(--muted) !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <div class="left">
+        <div class="logo"><img src="../assets/logo.png" alt="Clube Xadrez Glória"></div>
+        <div>
+          <h1>Xadrez Glória — <span id="roundTitle">Ronda 5</span></h1>
+          <p class="sub">Resultados detalhados (pesquisa e ordenação disponíveis)</p>
+        </div>
+      </div>
+      <div class="nav">
+        <a href="../index.html">Voltar à classificação</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="roundHeader">Resultados — Ronda 5</h2>
+      <table id="results" class="display"></table>
+    </div>
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+
+  <script>
+    const RESULTS_CSV_URL =
+      "https://docs.google.com/spreadsheets/d/e/2PACX-1vTUHCT41rzpS78Ga3-cymPB94KTv6d88Lx1PYTleMDOLOzaE53n5v-dfX91MNqQvEP_9FlSvCLdhxyr/pub?gid=1692608023&single=true&output=csv";
+
+    // Change ONLY this number per page (1..5)
+    const ROUND_NUMBER = 5;
+
+    // Accept common header names in case you change language later
+    const ROUND_HEADER_CANDIDATES = ["round", "ronda", "rodada"];
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], field = "", inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"') {
+          if (inQuotes && next === '"') { field += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes) {
+          row.push(field); field = "";
+        } else if ((c === '\n' || c === '\r') && !inQuotes) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(field); field = "";
+          if (row.some(v => v.trim() !== "")) rows.push(row);
+          row = [];
+        } else {
+          field += c;
+        }
+      }
+      row.push(field);
+      if (row.some(v => v.trim() !== "")) rows.push(row);
+      return rows;
+    }
+
+    function normalizeHeader(h) {
+      return (h || "").trim().toLowerCase();
+    }
+
+    async function initRound() {
+      document.getElementById("roundTitle").textContent = `Ronda ${ROUND_NUMBER}`;
+      document.getElementById("roundHeader").textContent = `Resultados — Ronda ${ROUND_NUMBER}`;
+      document.title = `Xadrez Glória — Ronda ${ROUND_NUMBER}`;
+
+      const res = await fetch(RESULTS_CSV_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("Não consegui carregar o CSV de resultados.");
+      const csvText = await res.text();
+
+      const data = parseCSV(csvText);
+      if (data.length < 2) throw new Error("O CSV de resultados não tem dados suficientes.");
+
+      const headers = data[0].map(h => h.trim());
+      const rows = data.slice(1);
+
+      const headerIndex = headers.map(normalizeHeader);
+
+      const roundColIndex = headerIndex.findIndex(h => ROUND_HEADER_CANDIDATES.includes(h));
+      if (roundColIndex === -1) {
+        throw new Error("Não encontrei uma coluna 'Round'/'Ronda' no CSV. Adicione uma coluna de ronda na sheet Public.");
+      }
+
+      const filtered = rows.filter(r => String((r[roundColIndex] ?? "")).trim() === String(ROUND_NUMBER));
+
+      const table = document.getElementById("results");
+      table.innerHTML = `
+        <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${filtered.map(r => `<tr>${headers.map((_, i) => `<td>${(r[i] ?? "").trim()}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      `;
+
+      new DataTable("#results", {
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [10, 25, 50, 100],
+        order: [],
+        responsive: true
+      });
+    }
+
+    initRound().catch(err => {
+      document.querySelector(".wrap").insertAdjacentHTML("beforeend",
+        `<p style="color:#ffb4b4; margin-top:14px;"><strong>Erro:</strong> ${err.message}</p>`
+      );
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
