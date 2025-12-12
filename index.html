@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Xadrez Glória — Resultados</title>
+
+  <!-- DataTables CSS -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.8/css/dataTables.dataTables.min.css">
+
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+    header { margin-bottom: 12px; }
+    h1 { font-size: 20px; margin: 0 0 6px 0; }
+    .hint { color: #555; font-size: 13px; margin: 0 0 12px 0; }
+    table { width: 100%; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Xadrez Glória — Resultados</h1>
+    <p class="hint">Pesquise por jogador, ou clique nos cabeçalhos para ordenar.</p>
+  </header>
+
+  <table id="results" class="display"></table>
+
+  <!-- jQuery (required by DataTables) -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- DataTables JS -->
+  <script src="https://cdn.datatables.net/2.1.8/js/dataTables.min.js"></script>
+
+  <script>
+    // 1) Paste your published CSV link here:
+    const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQhsw5yFzeSKn34dAC8vL82hgS4xflx8eZ3ww2NaxFbZtYhHWjQ8vhgYQkv6VbdtG38rWv7vEe3HFMb/pub?gid=0&single=true&output=csv";
+
+    // Robust CSV parsing for simple CSV (works well for typical Sheets exports).
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], field = "", inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        const next = text[i + 1];
+
+        if (c === '"' ) {
+          if (inQuotes && next === '"') { field += '"'; i++; }
+          else { inQuotes = !inQuotes; }
+        } else if (c === ',' && !inQuotes) {
+          row.push(field); field = "";
+        } else if ((c === '\n' || c === '\r') && !inQuotes) {
+          if (c === '\r' && next === '\n') i++;
+          row.push(field); field = "";
+          // Ignore completely empty trailing rows
+          if (row.some(v => v.trim() !== "")) rows.push(row);
+          row = [];
+        } else {
+          field += c;
+        }
+      }
+      // last field
+      row.push(field);
+      if (row.some(v => v.trim() !== "")) rows.push(row);
+
+      return rows;
+    }
+
+    async function init() {
+      const res = await fetch(CSV_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error("Não consegui carregar o CSV. Verifique o link publicado.");
+      const csvText = await res.text();
+
+      const data = parseCSV(csvText);
+      if (data.length < 2) throw new Error("O CSV não tem dados suficientes.");
+
+      const headers = data[0].map(h => h.trim());
+      const rows = data.slice(1);
+
+      // Build table header
+      const table = document.getElementById("results");
+      table.innerHTML = `
+        <thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead>
+        <tbody>
+          ${rows.map(r => `<tr>${headers.map((_, i) => `<td>${(r[i] ?? "").trim()}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      `;
+
+      // Activate DataTables
+      new DataTable("#results", {
+        paging: true,
+        pageLength: 25,
+        lengthMenu: [10, 25, 50, 100],
+        order: [],           // no forced default ordering (click headers to sort)
+        responsive: true
+      });
+    }
+
+    init().catch(err => {
+      document.body.insertAdjacentHTML("beforeend",
+        `<p style="color:#b00020"><strong>Erro:</strong> ${err.message}</p>`
+      );
+      console.error(err);
+    });
+  </script>
+</body>
+</html>
